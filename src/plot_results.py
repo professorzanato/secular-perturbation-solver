@@ -1,199 +1,274 @@
 """
-Programa principal para cálculo e visualização de perturbações seculares.
+Visualização dos resultados da teoria secular de Laplace-Lagrange.
 
-Integra todos os módulos para calcular a evolução secular de sistemas planetários
-usando a teoria de Laplace-Lagrange.
+Gera gráficos da evolução temporal de excentricidades, inclinações,
+e outros elementos orbitais baseados na solução secular.
 """
 
-import numpy as np
-import json
 import matplotlib.pyplot as plt
-from pathlib import Path
-import sys
+import numpy as np
+from typing import Dict, List, Any
+import matplotlib.gridspec as gridspec
+from dataclasses import dataclass
 
-# Adiciona o diretório src ao path
-src_path = Path(__file__).parent
-sys.path.append(str(src_path))
+# Configuração do estilo matplotlib
+plt.style.use('default')
+plt.rcParams.update({
+    'font.size': 10,
+    'font.family': 'serif',
+    'font.serif': ['Times New Roman', 'Computer Modern Roman'],
+    'mathtext.fontset': 'cm',
+    'axes.labelsize': 12,
+    'axes.titlesize': 14,
+    'legend.fontsize': 10,
+    'xtick.labelsize': 10,
+    'ytick.labelsize': 10,
+    'figure.figsize': (10, 8),
+    'figure.dpi': 100,
+    'savefig.dpi': 300,
+    'savefig.bbox': 'tight',
+    'savefig.pad_inches': 0.1
+})
 
-# Importa módulos próprios
-from parameters import ParameterLoader, BodyParameters, SystemParameters
-from matrix_calculations import SecularMatrixCalculator, calculate_secular_system
-from secular_solver import SecularSolver, create_initial_conditions
-from plot_results import SecularPlotter, plot_secular_evolution
+class SecularPlotter:
+    """
+    Classe para visualização dos resultados da teoria secular.
+    
+    Gera gráficos similares à Figura 7.1 de Murray & Dermott (1999),
+    mostrando a evolução secular de excentricidades e inclinações.
+    """
+    
+    def __init__(self, solution):
+        """
+        Inicializa o plotter com a solução secular.
+        
+        Parameters
+        ----------
+        solution : SecularSolution
+            Solução do sistema secular
+        """
+        self.solution = solution
+        self.planet_names = list(solution.eccentricities.keys())
+        self.n_planets = len(self.planet_names)
+        
+    def plot_eccentricity_evolution(self, ax: plt.Axes = None, 
+                                   colors: List[str] = None,
+                                   **plot_kwargs) -> plt.Axes:
+        """
+        Plota a evolução temporal das excentricidades.
+        """
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(10, 6))
+        
+        if colors is None:
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'][:self.n_planets]
+        
+        time_years = self.solution.time_array
+        
+        for i, name in enumerate(self.planet_names):
+            ecc = self.solution.eccentricities[name]
+            ax.plot(time_years, ecc, color=colors[i], 
+                   label=name, linewidth=2, **plot_kwargs)
+        
+        # Configurações do gráfico
+        ax.set_xlabel('Tempo (anos)')
+        ax.set_ylabel('Excentricidade')
+        ax.set_title('Evolução Secular das Excentricidades')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        
+        # Formatação do eixo x para grandes intervalos de tempo
+        if time_years[-1] > 10000:
+            ax.xaxis.set_major_formatter(plt.FuncFormatter(
+                lambda x, p: f'{x/1000:.0f}k' if x >= 1000 else f'{x:.0f}'
+            ))
+            ax.set_xlabel('Tempo (mil anos)')
+        
+        return ax
+    
+    def plot_inclination_evolution(self, ax: plt.Axes = None,
+                                  colors: List[str] = None,
+                                  **plot_kwargs) -> plt.Axes:
+        """
+        Plota a evolução temporal das inclinações.
+        """
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(10, 6))
+        
+        if colors is None:
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'][:self.n_planets]
+        
+        time_years = self.solution.time_array
+        
+        for i, name in enumerate(self.planet_names):
+            inc = self.solution.inclinations[name]
+            ax.plot(time_years, inc, color=colors[i],
+                   label=name, linewidth=2, **plot_kwargs)
+        
+        # Configurações do gráfico
+        ax.set_xlabel('Tempo (anos)')
+        ax.set_ylabel('Inclinação (graus)')
+        ax.set_title('Evolução Secular das Inclinações')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        
+        # Formatação do eixo x para grandes intervalos de tempo
+        if time_years[-1] > 10000:
+            ax.xaxis.set_major_formatter(plt.FuncFormatter(
+                lambda x, p: f'{x/1000:.0f}k' if x >= 1000 else f'{x:.0f}'
+            ))
+            ax.set_xlabel('Tempo (mil anos)')
+        
+        return ax
+    
+    def plot_phase_space(self, fig: plt.Figure = None,
+                        colors: List[str] = None) -> plt.Figure:
+        """
+        Plota o espaço de fase das variáveis seculares.
+        """
+        if fig is None:
+            fig = plt.figure(figsize=(12, 10))
+        
+        if colors is None:
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'][:self.n_planets]
+        
+        gs = gridspec.GridSpec(2, 2, figure=fig)
+        
+        # Plot (h, k) - espaço de fase das excentricidades
+        ax1 = fig.add_subplot(gs[0, 0])
+        for i, name in enumerate(self.planet_names):
+            h = np.array([e * np.sin(w * np.pi/180) for e, w in 
+                         zip(self.solution.eccentricities[name], 
+                             self.solution.longitudes_peri[name])])
+            k = np.array([e * np.cos(w * np.pi/180) for e, w in 
+                         zip(self.solution.eccentricities[name], 
+                             self.solution.longitudes_peri[name])])
+            ax1.plot(k, h, color=colors[i], label=name, linewidth=1.5)
+            ax1.plot(k[0], h[0], 'o', color=colors[i], markersize=6)  # Ponto inicial
+        
+        ax1.set_xlabel('$k = e \cos\\varpi$')
+        ax1.set_ylabel('$h = e \sin\\varpi$')
+        ax1.set_title('Espaço de Fase: Excentricidades')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend()
+        ax1.axis('equal')
+        
+        # Plot (p, q) - espaço de fase das inclinações
+        ax2 = fig.add_subplot(gs[0, 1])
+        for i, name in enumerate(self.planet_names):
+            p = np.array([i * np.sin(w * np.pi/180) for i, w in 
+                         zip(self.solution.inclinations[name], 
+                             self.solution.longitudes_node[name])])
+            q = np.array([i * np.cos(w * np.pi/180) for i, w in 
+                         zip(self.solution.inclinations[name], 
+                             self.solution.longitudes_node[name])])
+            ax2.plot(q, p, color=colors[i], label=name, linewidth=1.5)
+            ax2.plot(q[0], p[0], 'o', color=colors[i], markersize=6)  # Ponto inicial
+        
+        ax2.set_xlabel('$q = I \cos\\Omega$')
+        ax2.set_ylabel('$p = I \sin\\Omega$')
+        ax2.set_title('Espaço de Fase: Inclinações')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend()
+        ax2.axis('equal')
+        
+        # Plot longitude do periélio
+        ax3 = fig.add_subplot(gs[1, 0])
+        for i, name in enumerate(self.planet_names):
+            time_kyr = self.solution.time_array / 1000  # mil anos
+            ax3.plot(time_kyr, self.solution.longitudes_peri[name], 
+                    color=colors[i], label=name, linewidth=1.5)
+        
+        ax3.set_xlabel('Tempo (mil anos)')
+        ax3.set_ylabel('Longitude do Periélio (graus)')
+        ax3.set_title('Evolução da Longitude do Periélio')
+        ax3.grid(True, alpha=0.3)
+        ax3.legend()
+        
+        # Plot longitude do nó
+        ax4 = fig.add_subplot(gs[1, 1])
+        for i, name in enumerate(self.planet_names):
+            time_kyr = self.solution.time_array / 1000  # mil anos
+            ax4.plot(time_kyr, self.solution.longitudes_node[name], 
+                    color=colors[i], label=name, linewidth=1.5)
+        
+        ax4.set_xlabel('Tempo (mil anos)')
+        ax4.set_ylabel('Longitude do Nó (graus)')
+        ax4.set_title('Evolução da Longitude do Nó')
+        ax4.grid(True, alpha=0.3)
+        ax4.legend()
+        
+        plt.tight_layout()
+        return fig
+    
+    def plot_murray_figure_7_1(self, save_path: str = None) -> plt.Figure:
+        """
+        Recria a Figura 7.1 de Murray & Dermott (1999).
+        """
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+        
+        # Cores no estilo Murray & Dermott
+        colors = ['#0066cc', '#cc6600']  # Azul e laranja
+        
+        time_kyr = self.solution.time_array / 1000  # mil anos
+        
+        # Painel superior: Excentricidades
+        for i, name in enumerate(self.planet_names):
+            ax1.plot(time_kyr, self.solution.eccentricities[name],
+                    color=colors[i], linewidth=2, label=name)
+        
+        ax1.set_ylabel('Excentricidade')
+        ax1.set_title('Evolução Secular de Júpiter e Saturno')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend()
+        ax1.set_xlim(time_kyr[0], time_kyr[-1])
+        
+        # Painel inferior: Inclinações
+        for i, name in enumerate(self.planet_names):
+            ax2.plot(time_kyr, self.solution.inclinations[name],
+                    color=colors[i], linewidth=2, label=name)
+        
+        ax2.set_xlabel('Tempo (mil anos)')
+        ax2.set_ylabel('Inclinação (graus)')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend()
+        ax2.set_xlim(time_kyr[0], time_kyr[-1])
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Figura salva em: {save_path}")
+        
+        return fig
 
-def load_system_parameters(config_file: str) -> SystemParameters:
+def plot_secular_evolution(solution, 
+                          plot_type: str = 'combined',
+                          save_path: str = None) -> plt.Figure:
     """
-    Carrega parâmetros do sistema a partir de arquivo JSON.
-    
-    Parameters
-    ----------
-    config_file : str
-        Caminho para o arquivo de configuração JSON
-    
-    Returns
-    -------
-    SystemParameters
-        Parâmetros do sistema carregados
+    Função conveniente para plotar resultados seculares.
     """
-    loader = ParameterLoader()
-    return loader.load_from_file(config_file)
-
-def run_secular_analysis(config_file: str, output_dir: str = None) -> dict:
-    """
-    Executa análise secular completa para um sistema planetário.
-    
-    Parameters
-    ----------
-    config_file : str
-        Caminho para o arquivo de configuração JSON
-    output_dir : str, optional
-        Diretório para salvar resultados (se None, não salva)
-    
-    Returns
-    -------
-    dict
-        Resultados completos da análise
-    """
-    # Carrega parâmetros
-    print("Carregando parâmetros do sistema...")
-    system_params = load_system_parameters(config_file)
-    
-    # Extrai arrays para cálculo
-    masses = [body.mass for body in system_params.bodies]
-    semi_major_axes = [body.semi_major_axis for body in system_params.bodies]
-    mean_motions = [body.mean_motion for body in system_params.bodies]
-    planet_names = [body.name for body in system_params.bodies]
-    
-    # Condições iniciais
-    eccentricities = [body.eccentricity for body in system_params.bodies]
-    inclinations = [body.inclination for body in system_params.bodies]
-    longitudes_peri = [body.longitude_peri for body in system_params.bodies]
-    longitudes_node = [body.longitude_node for body in system_params.bodies]
-    
-    # Calcula matrizes seculares
-    print("Calculando matrizes seculares...")
-    secular_results = calculate_secular_system(
-        system_params.central_body_mass,
-        masses,
-        semi_major_axes,
-        mean_motions
-    )
-    
-    # Cria condições iniciais
-    initial_conditions = create_initial_conditions(
-        eccentricities, inclinations, longitudes_peri, longitudes_node
-    )
-    
-    # Resolve sistema secular
-    print("Resolvendo sistema secular...")
-    solver = SecularSolver(secular_results, planet_names, initial_conditions)
-    solution = solver.solve(
-        time_span=system_params.time_span,
-        time_step=system_params.time_step
-    )
-    
-    # Gera gráficos
-    print("Gerando gráficos...")
     plotter = SecularPlotter(solution)
     
-    # Figura principal (estilo Murray & Dermott)
-    fig_main = plotter.plot_murray_figure_7_1()
+    if plot_type == 'combined':
+        fig = plotter.plot_murray_figure_7_1(save_path)
+    elif plot_type == 'eccentricity':
+        fig, ax = plt.subplots(figsize=(10, 6))
+        plotter.plot_eccentricity_evolution(ax)
+    elif plot_type == 'inclination':
+        fig, ax = plt.subplots(figsize=(10, 6))
+        plotter.plot_inclination_evolution(ax)
+    elif plot_type == 'phase':
+        fig = plotter.plot_phase_space()
+    else:
+        raise ValueError("Tipo de plot não reconhecido")
     
-    # Gráficos adicionais
-    fig_phase = plotter.plot_phase_space()
-    stats = plotter.plot_summary_statistics()
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
     
-    # Salva resultados se solicitado
-    if output_dir:
-        output_path = Path(output_dir)
-        output_path.mkdir(exist_ok=True)
-        
-        # Salva figuras
-        fig_main.savefig(output_path / "secular_evolution.png", dpi=300)
-        fig_phase.savefig(output_path / "phase_space.png", dpi=300)
-        
-        # Salva dados numéricos
-        np.savez(output_path / "secular_solution.npz",
-                time=solution.time_array,
-                eccentricities=solution.eccentricities,
-                inclinations=solution.inclinations,
-                longitudes_peri=solution.longitudes_peri,
-                longitudes_node=solution.longitudes_node)
-        
-        # Salva estatísticas
-        with open(output_path / "statistics.json", 'w') as f:
-            json.dump(stats, f, indent=2)
-        
-        print(f"Resultados salvos em: {output_path}")
-    
-    return {
-        'system_params': system_params,
-        'secular_results': secular_results,
-        'solution': solution,
-        'statistics': stats
-    }
+    return fig
 
-def main():
-    """Função principal do programa."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Solver de Perturbações Seculares')
-    parser.add_argument('config', help='Arquivo de configuração JSON')
-    parser.add_argument('-o', '--output', help='Diretório de saída')
-    parser.add_argument('-p', '--plot', action='store_true', help='Mostrar gráficos interativos')
-    
-    args = parser.parse_args()
-    
-    try:
-        # Executa análise
-        results = run_secular_analysis(args.config, args.output)
-        
-        # Mostra resumo
-        print("\n" + "="*50)
-        print("RESUMO DA ANÁLISE SECULAR")
-        print("="*50)
-        
-        print(f"\nSistema: {len(results['system_params'].bodies)} planetas")
-        for body in results['system_params'].bodies:
-            print(f"  - {body.name}: a={body.semi_major_axis:.3f} AU, e={body.eccentricity:.4f}")
-        
-        print(f"\nFrequências seculares:")
-        g_freq = results['secular_results']['g_frequencies']
-        f_freq = results['secular_results']['f_frequencies']
-        
-        for i, freq in enumerate(g_freq):
-            period = 360 / abs(freq) if abs(freq) > 1e-10 else np.inf
-            print(f"  g_{i+1}: {freq:.6f} °/ano (período: {period:.0f} anos)")
-        
-        for i, freq in enumerate(f_freq):
-            period = 360 / abs(freq) if abs(freq) > 1e-10 else np.inf
-            print(f"  f_{i+1}: {freq:.6f} °/ano (período: {period:.0f} anos)")
-        
-        # Mostra gráficos se solicitado
-        if args.plot:
-            plt.show()
-        
-        print("\nAnálise concluída com sucesso!")
-            
-    except Exception as e:
-        print(f"Erro durante a execução: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-    
-    return 0
-
+# Testes unitários
 if __name__ == "__main__":
-    # Exemplo de uso direto (para teste)
-    try:
-        # Tenta carregar exemplo de Júpiter-Saturno
-        config_file = "../examples/jupiter_saturn/jupiter_saturn_input.json"
-        results = run_secular_analysis(config_file)
-        plt.show()
-        
-    except FileNotFoundError:
-        print("Arquivo de exemplo não encontrado. Execute via linha de comando:")
-        print("python src/main.py examples/jupiter_saturn/jupiter_saturn_input.json -p")
-        
-    except Exception as e:
-        print(f"Erro: {e}")
+    print("Teste do módulo de plotagem secular")
+    print("Este módulo requer uma solução secular para testar.")

@@ -1,8 +1,5 @@
 """
 Programa principal para cálculo e visualização de perturbações seculares.
-
-Integra todos os módulos para calcular a evolução secular de sistemas planetários
-usando a teoria de Laplace-Lagrange.
 """
 
 import numpy as np
@@ -10,39 +7,77 @@ import json
 import matplotlib.pyplot as plt
 from pathlib import Path
 import sys
+import os
 
-# Adiciona o diretório src ao path
-src_path = Path(__file__).parent
-sys.path.append(str(src_path))
+# Adiciona o diretório atual ao path para importar módulos
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Importa módulos próprios
+print("Tentando importar módulos...")
+
+# Importa módulos próprios com verificação individual
+try:
+    print("1. Importando parameters...")
+    from parameters import ParameterLoader
+    print("   ✓ parameters importado com sucesso!")
+except ImportError as e:
+    print(f"   ✗ Erro ao importar parameters: {e}")
+
+try:
+    print("2. Importando matrix_calculations...")
+    from matrix_calculations import calculate_secular_system
+    print("   ✓ matrix_calculations importado com sucesso!")
+except ImportError as e:
+    print(f"   ✗ Erro ao importar matrix_calculations: {e}")
+
+try:
+    print("3. Importando secular_solver...")
+    from secular_solver import SecularSolver, create_initial_conditions
+    print("   ✓ secular_solver importado com sucesso!")
+except ImportError as e:
+    print(f"   ✗ Erro ao importar secular_solver: {e}")
+
+try:
+    print("4. Importando plot_results...")
+    from plot_results import SecularPlotter
+    print("   ✓ plot_results importado com sucesso!")
+except ImportError as e:
+    print(f"   ✗ Erro ao importar plot_results: {e}")
+
+# Verifica se todos os módulos foram importados com sucesso
 try:
     from parameters import ParameterLoader
     from matrix_calculations import calculate_secular_system
     from secular_solver import SecularSolver, create_initial_conditions
     from plot_results import SecularPlotter
+    print("\nTodos os módulos importados com sucesso!")
 except ImportError as e:
-    print(f"Erro ao importar módulos: {e}")
-    print("Certifique-se de que todos os arquivos estão na pasta src/")
+    print(f"\nErro ao importar módulos: {e}")
+    print("Arquivos necessários na pasta src/:")
+    print("- parameters.py")
+    print("- matrix_calculations.py") 
+    print("- laplace_coefficients.py")
+    print("- secular_solver.py")
+    print("- plot_results.py")
     sys.exit(1)
 
 def load_system_parameters(config_file: str):
-    """
-    Carrega parâmetros do sistema a partir de arquivo JSON.
-    """
+    """Carrega parâmetros do sistema a partir de arquivo JSON."""
+    config_path = Path(config_file)
+    if not config_path.is_absolute():
+        config_path = Path.cwd() / config_path
+    
     loader = ParameterLoader()
-    return loader.load_from_file(config_file)
+    return loader.load_from_file(str(config_path))
 
 def run_secular_analysis(config_file: str, output_dir: str = None):
-    """
-    Executa análise secular completa para um sistema planetário.
-    """
+    """Executa análise secular completa para um sistema planetário."""
     print("Carregando parâmetros do sistema...")
     
     try:
         system_params = load_system_parameters(config_file)
-    except FileNotFoundError:
-        print(f"Arquivo de configuração não encontrado: {config_file}")
+        print(f"Parâmetros carregados: {len(system_params.bodies)} planetas")
+    except Exception as e:
+        print(f"Erro ao carregar parâmetros: {e}")
         return None
     
     # Extrai arrays para cálculo
@@ -50,12 +85,6 @@ def run_secular_analysis(config_file: str, output_dir: str = None):
     semi_major_axes = [body.semi_major_axis for body in system_params.bodies]
     mean_motions = [body.mean_motion for body in system_params.bodies]
     planet_names = [body.name for body in system_params.bodies]
-    
-    # Condições iniciais
-    eccentricities = [body.eccentricity for body in system_params.bodies]
-    inclinations = [body.inclination for body in system_params.bodies]
-    longitudes_peri = [body.longitude_peri for body in system_params.bodies]
-    longitudes_node = [body.longitude_node for body in system_params.bodies]
     
     print("Calculando matrizes seculares...")
     try:
@@ -65,9 +94,16 @@ def run_secular_analysis(config_file: str, output_dir: str = None):
             semi_major_axes,
             mean_motions
         )
+        print("Matrizes calculadas com sucesso!")
     except Exception as e:
         print(f"Erro no cálculo das matrizes: {e}")
         return None
+    
+    # Condições iniciais
+    eccentricities = [body.eccentricity for body in system_params.bodies]
+    inclinations = [body.inclination for body in system_params.bodies]
+    longitudes_peri = [body.longitude_peri for body in system_params.bodies]
+    longitudes_node = [body.longitude_node for body in system_params.bodies]
     
     # Cria condições iniciais
     initial_conditions = create_initial_conditions(
@@ -81,6 +117,7 @@ def run_secular_analysis(config_file: str, output_dir: str = None):
             time_span=system_params.time_span,
             time_step=system_params.time_step
         )
+        print("Sistema resolvido com sucesso!")
     except Exception as e:
         print(f"Erro na solução do sistema: {e}")
         return None
@@ -89,6 +126,7 @@ def run_secular_analysis(config_file: str, output_dir: str = None):
     try:
         plotter = SecularPlotter(solution)
         fig_main = plotter.plot_murray_figure_7_1()
+        print("Gráficos gerados com sucesso!")
     except Exception as e:
         print(f"Erro na geração de gráficos: {e}")
         return None
@@ -110,15 +148,16 @@ def main():
     args = parser.parse_args()
     
     # Verifica se o arquivo de configuração existe
-    if not Path(args.config).exists():
+    config_path = Path(args.config)
+    if not config_path.exists():
         print(f"Arquivo de configuração não encontrado: {args.config}")
-        print("Crie primeiro o arquivo examples/jupiter_saturn/jupiter_saturn_input.json")
         return 1
     
     try:
         results = run_secular_analysis(args.config)
         
         if results is None:
+            print("Falha na análise secular.")
             return 1
         
         # Mostra resumo
@@ -128,7 +167,7 @@ def main():
         
         print(f"\nSistema: {len(results['system_params'].bodies)} planetas")
         for body in results['system_params'].bodies:
-            print(f"  - {body.name}: a={body.semi_major_axis:.3f} AU, e={body.eccentricity:.4f}")
+            print(f"  - {body.name}: a={body.semi_major_axis:.3f} AU, e={body.eccentricity:.4f}, I={body.inclination:.3f}°")
         
         print(f"\nFrequências seculares:")
         g_freq = results['secular_results']['g_frequencies']
@@ -144,6 +183,7 @@ def main():
         
         # Mostra gráficos se solicitado
         if args.plot:
+            print("\nMostrando gráficos... Feche as janelas para continuar.")
             plt.show()
         
         print("\nAnálise concluída com sucesso!")
@@ -157,22 +197,4 @@ def main():
     return 0
 
 if __name__ == "__main__":
-    # Teste simples se executado diretamente
-    print("Solver de Perturbações Seculares")
-    print("Use: python src/main.py arquivo_config.json [-p]")
-    
-    # Tenta encontrar um arquivo de exemplo
-    example_files = [
-        "examples/jupiter_saturn/jupiter_saturn_input.json",
-        "../examples/jupiter_saturn/jupiter_saturn_input.json",
-        "jupiter_saturn_input.json"
-    ]
-    
-    for example_file in example_files:
-        if Path(example_file).exists():
-            print(f"\nExemplo encontrado: {example_file}")
-            print(f"Execute: python src/main.py {example_file} -p")
-            break
-    else:
-        print("\nNenhum arquivo de exemplo encontrado.")
-        print("Crie primeiro o arquivo examples/jupiter_saturn/jupiter_saturn_input.json")
+    sys.exit(main())
