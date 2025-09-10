@@ -1,0 +1,32 @@
+{
+    "central_body": {
+        "name": "Sun",
+        "mass": 1.0
+    },
+    "orbiting_bodies": [
+        {
+            "name": "Jupiter",
+            "mass": 9.54786e-4,
+            "semi_major_axis": 5.202545,
+            "mean_motion": 30.3374,
+            "eccentricity": 0.0474622,
+            "inclination": 1.30667,
+            "longitude_peri": 13.983865,
+            "longitude_node": 100.0381
+        },
+        {
+            "name": "Saturn",
+            "mass": 2.85837e-4,
+            "semi_major_axis": 9.554841,
+            "mean_motion": 12.1890,
+            "eccentricity": 0.0575481,
+            "inclination": 2.48795,
+            "longitude_peri": 88.719425,
+            "longitude_node": 113.1334
+        }
+    ],
+    "time_config": {
+        "time_span": [0, 200000],
+        "time_step": 100
+    }
+}
