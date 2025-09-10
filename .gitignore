@@ -205,3 +205,24 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Dados de output
+data/output/
+
+# Arquivos temporários
+*.pyc
+__pycache__/
+*.so
+*.egg-info/
+
+# Ambiente virtual
+venv/
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
+Thumbs.db
